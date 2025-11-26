@@ -32,8 +32,9 @@ class EmbeddingService:
             )
             logging.debug(f"Embedding response: {response}")
             
-            # Extract embedding from response
-            embedding = response.data[0]["embedding"]
+            # Extract embedding from response (handle both dict and object formats)
+            item = response.data[0]
+            embedding = item["embedding"] if isinstance(item, dict) else item.embedding
             
             # Validate embedding dimensions
             if len(embedding) != self.config.dimensions:
@@ -67,8 +68,8 @@ class EmbeddingService:
                 custom_llm_provider="openai"
             )
             
-            # Extract embeddings from response
-            embeddings = [item.embedding for item in response.data]
+            # Extract embeddings from response (handle both dict and object formats)
+            embeddings = [item["embedding"] if isinstance(item, dict) else item.embedding for item in response.data]
             
             # Validate embedding dimensions
             for i, embedding in enumerate(embeddings):
