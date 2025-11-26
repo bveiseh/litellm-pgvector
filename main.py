@@ -327,6 +327,7 @@ async def create_embedding(
 ):
     """
     Add a single embedding to a vector store.
+    If embedding is not provided, it will be generated automatically.
     """
     try:
         # Check if vector store exists
@@ -338,8 +339,14 @@ async def create_embedding(
         if not vector_store_result:
             raise HTTPException(status_code=404, detail="Vector store not found")
         
+        # Generate embedding if not provided
+        if request.embedding is None:
+            embedding_vector = await embedding_service.generate_embedding(request.content)
+        else:
+            embedding_vector = request.embedding
+        
         # Convert embedding to vector string format
-        embedding_vector_str = "[" + ",".join(map(str, request.embedding)) + "]"
+        embedding_vector_str = "[" + ",".join(map(str, embedding_vector)) + "]"
         
         # Insert embedding using configurable field names
         fields = settings.db_fields
@@ -369,12 +376,11 @@ async def create_embedding(
             f"""
             UPDATE {vector_store_table} 
             SET file_counts = jsonb_set(
-                    COALESCE(file_counts, '{{"in_progress": 0, "completed": 0, "failed": 0, "cancelled": 0, "total": 0}}'::jsonb),
-                    '{{completed}}',
-                    (COALESCE(file_counts->>'completed', '0')::int + 1)::text::jsonb
-                ),
-                file_counts = jsonb_set(
-                    file_counts,
+                    jsonb_set(
+                        COALESCE(file_counts, '{{"in_progress": 0, "completed": 0, "failed": 0, "cancelled": 0, "total": 0}}'::jsonb),
+                        '{{completed}}',
+                        (COALESCE(file_counts->>'completed', '0')::int + 1)::text::jsonb
+                    ),
                     '{{total}}',
                     (COALESCE(file_counts->>'total', '0')::int + 1)::text::jsonb
                 ),
@@ -410,6 +416,7 @@ async def create_embeddings_batch(
 ):
     """
     Add multiple embeddings to a vector store in batch.
+    If embeddings are not provided, they will be generated automatically.
     """
     try:
         # Check if vector store exists
@@ -423,6 +430,16 @@ async def create_embeddings_batch(
         
         if not request.embeddings:
             raise HTTPException(status_code=400, detail="No embeddings provided")
+        
+        # Generate embeddings for items that don't have them
+        texts_to_embed = [req.content for req in request.embeddings if req.embedding is None]
+        if texts_to_embed:
+            generated_embeddings = await embedding_service.generate_embeddings(texts_to_embed)
+            gen_idx = 0
+            for req in request.embeddings:
+                if req.embedding is None:
+                    req.embedding = generated_embeddings[gen_idx]
+                    gen_idx += 1
         
         # Prepare batch insert
         fields = settings.db_fields
@@ -469,12 +486,11 @@ async def create_embeddings_batch(
             f"""
             UPDATE {vector_store_table} 
             SET file_counts = jsonb_set(
-                    COALESCE(file_counts, '{{"in_progress": 0, "completed": 0, "failed": 0, "cancelled": 0, "total": 0}}'::jsonb),
-                    '{{completed}}',
-                    (COALESCE(file_counts->>'completed', '0')::int + $2)::text::jsonb
-                ),
-                file_counts = jsonb_set(
-                    file_counts,
+                    jsonb_set(
+                        COALESCE(file_counts, '{{"in_progress": 0, "completed": 0, "failed": 0, "cancelled": 0, "total": 0}}'::jsonb),
+                        '{{completed}}',
+                        (COALESCE(file_counts->>'completed', '0')::int + $2)::text::jsonb
+                    ),
                     '{{total}}',
                     (COALESCE(file_counts->>'total', '0')::int + $2)::text::jsonb
                 ),

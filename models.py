@@ -55,7 +55,7 @@ class VectorStoreSearchResponse(BaseModel):
 
 class EmbeddingCreateRequest(BaseModel):
     content: str
-    embedding: List[float]
+    embedding: Optional[List[float]] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
